@@ -14,7 +14,7 @@ flowchart LR
         G -->|reads, or writes approved| T[tools]
         G -->|write denied| M
         T --> M
-        M -->|answer| E((end))
+        M -->|answer| A((reply))
         M -->|more than 8 turns| S[stop]
     end
     T <-->|MCP over stdio| MCP[servicenow MCP server]
