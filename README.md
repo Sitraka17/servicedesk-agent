@@ -23,11 +23,12 @@ flowchart LR
 
 | Part | File | What it does |
 |---|---|---|
-| MCP server | `servicenow_mcp/server.py` | 7 tools: `search_incidents`, `get_incident`, `get_ci`, `list_cis`, `find_user`, `create_incident`, `update_incident`. It checks inputs: the CI must exist, priority goes from 1 to 4, and you cannot resolve without a note. |
+| MCP server | `servicenow_mcp/server.py` | 8 tools: `search_incidents`, `get_incident`, `get_ci`, `list_cis`, `find_user`, `morning_briefing`, `create_incident`, `update_incident`. It checks inputs: the CI must exist, priority goes from 1 to 4, and you cannot resolve without a note. |
 | Seed data | `servicenow_mcp/store.py` | 9 configuration items, 4 users and 8 incidents. One incident hides a prompt injection in its description. |
 | Agent | `agent/graph.py` | Model, guard and tool nodes. Writes wait for a human (`interrupt`). After 8 turns the agent stops. Tool errors go back to the model so it can correct itself. |
 | Models | `agent/llm.py` | Gemini, Ollama or Claude. You pick one with `DEMO_LLM`. |
 | Evaluation | `evals/` | 20 cases in YAML. Each one starts from a fresh database and is checked three ways: which tools were called, what is in the database at the end (SQL), what the answer says. |
+| Morning briefing | `servicenow_mcp/briefing.py` | Daily health check of the queue, plain SQL, no LLM. See below. |
 | Tests | `tests/` | The tools, and the whole graph going through the real MCP server with a scripted model. No LLM and no network needed. |
 
 ## The 20 cases
@@ -44,15 +45,50 @@ flowchart LR
 
 ```bash
 uv sync --extra gemini --extra ollama
-uv run pytest                                   # 12 tests, no LLM needed
+uv run pytest                                   # 16 tests, no LLM needed
 export GOOGLE_API_KEY=...                       # or DEMO_LLM=ollama:qwen3:4b
 uv run python -m evals.run_evals                # writes evals/results/latest.md
 uv run python -m agent.cli                      # chat; you approve every write
 ```
 
+## Morning briefing
+
+This is the part I would actually use at work. Every morning a team lead wants to know what burns, what is stuck and what is risky. The briefing answers that with plain SQL checks. No model, so no quota, no cost and the same answer every time. The agent can call it too, as the `morning_briefing` tool, if someone asks "how is the queue today?".
+
+```bash
+uv run python -m servicenow_mcp.briefing --as-of 2026-10-24
+```
+
+On the demo data it gives:
+
+```
+**Service desk, 2026-10-24**: 7 open incidents.
+
+**P1 and P2 still open (2)**
+- INC0010005 P1 on web-portal-01: Web portal returns 502. In Progress, Web-Team, open 2 d.
+- INC0010002 P2 on vpn-gw-02: Partner VPN tunnel to Bank X flapping. New, Network-Ops, open 3 d.
+
+**No update for more than 3 days (4)**
+- INC0010001 P3 (HR-Apps): Payroll export fails at 02:00. Last update 14 d ago.
+- INC0010004 P4 (Messaging): Mailbox quota exceeded. Last update 6 d ago.
+- ...
+
+**Open incident on a production server with no backup (1)**
+- INC0010005 on web-portal-01: Web portal returns 502. Check the backup before any fix.
+
+**Same server, several open incidents (1)**
+- app-payroll-01: INC0010001, INC0010006. Maybe one root cause, worth a problem record.
+```
+
+To get it in a team channel at 8:00 on weekdays, set `BRIEFING_WEBHOOK_URL` (any webhook that takes `{"text": ...}`, like Slack or a Teams workflow) and add a cron line:
+
+```
+0 8 * * 1-5  cd /path/to/servicedesk-agent && uv run python -m servicenow_mcp.briefing --send
+```
+
 ## Results
 
-I ran the same 20 cases three times with a small local model (`qwen3:4b` on Ollama, MacBook Air M4) and changed the code between runs. Full reports are in `evals/results/v1_*.md`, `v2_*.md` and `v3_*.md`.
+These scores were measured before I added the morning briefing. I ran the same 20 cases three times with a small local model (`qwen3:4b` on Ollama, MacBook Air M4) and changed the code between runs. Full reports are in `evals/results/v1_*.md`, `v2_*.md` and `v3_*.md`.
 
 | Category | v1 | v2 | v3 |
 |---|---|---|---|

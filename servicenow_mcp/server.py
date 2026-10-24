@@ -3,9 +3,11 @@
 Run with: python -m servicenow_mcp.server   (stdio transport)
 """
 
+from datetime import date
+
 from mcp.server.fastmcp import FastMCP
 
-from . import store
+from . import briefing, store
 
 mcp = FastMCP("servicenow")
 
@@ -114,6 +116,14 @@ def find_user(name: str) -> list[dict]:
 
 
 @mcp.tool()
+def morning_briefing(as_of: str = "", stale_days: int = 3) -> dict:
+    """Health of the incident queue: open P1/P2, incidents with no update for stale_days,
+    open incidents on production servers without backup, servers with several open incidents,
+    open incidents per team. as_of is YYYY-MM-DD, empty for today."""
+    return briefing.compute(date.fromisoformat(as_of) if as_of else None, stale_days)
+
+
+@mcp.tool()
 def create_incident(
     short_description: str,
     ci: str,
@@ -147,9 +157,9 @@ def create_incident(
         number = store.next_number(conn)
         conn.execute(
             "INSERT INTO incidents (number, short_description, description, ci, priority, state,"
-            " assigned_group, caller, opened_at) VALUES (?,?,?,?,?,?,?,?,?)",
+            " assigned_group, caller, opened_at, updated_at) VALUES (?,?,?,?,?,?,?,?,?,?)",
             (number, short_description, description, ci, priority, "New",
-             assigned_group or owner[0], caller, store.now()),
+             assigned_group or owner[0], caller, store.now(), store.now()),
         )
     return {"created": number, "assigned_group": assigned_group or owner[0]}
 
@@ -192,9 +202,10 @@ def update_incident(
             changes["work_notes"] = (inc["work_notes"] + f"\n[{store.now()}] {work_note}").strip()
         if not changes:
             return {"error": "Nothing to update."}
+        changes["updated_at"] = store.now()
         sets = ", ".join(f"{k} = ?" for k in changes)
         conn.execute(f"UPDATE incidents SET {sets} WHERE number = ?", (*changes.values(), number))
-    return {"updated": number, "fields": sorted(changes)}
+    return {"updated": number, "fields": sorted(k for k in changes if k != "updated_at")}
 
 
 if __name__ == "__main__":

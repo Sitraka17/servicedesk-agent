@@ -18,7 +18,7 @@ CREATE TABLE users (
 CREATE TABLE incidents (
     number TEXT PRIMARY KEY, short_description TEXT, description TEXT,
     ci TEXT, priority INTEGER, state TEXT, assigned_group TEXT,
-    caller TEXT, opened_at TEXT, work_notes TEXT DEFAULT '', resolution_note TEXT DEFAULT ''
+    caller TEXT, opened_at TEXT, updated_at TEXT, work_notes TEXT DEFAULT '', resolution_note TEXT DEFAULT ''
 );
 """
 
@@ -80,8 +80,8 @@ def reset(path: str | None = None) -> str:
     conn.executemany("INSERT INTO users VALUES (?,?,?,?)", USERS)
     conn.executemany(
         "INSERT INTO incidents (number, short_description, description, ci, priority, state,"
-        " assigned_group, caller, opened_at) VALUES (?,?,?,?,?,?,?,?,?)",
-        INCIDENTS,
+        " assigned_group, caller, opened_at, updated_at) VALUES (?,?,?,?,?,?,?,?,?,?)",
+        [(*inc, inc[-1]) for inc in INCIDENTS],
     )
     conn.commit()
     conn.close()
