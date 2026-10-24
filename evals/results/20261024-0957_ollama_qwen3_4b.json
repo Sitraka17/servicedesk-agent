@@ -1,0 +1,19 @@
+{
+  "model": "ollama:qwen3:4b",
+  "results": [
+    {
+      "id": 1,
+      "category": "read",
+      "prompt": "What's the status of INC0010003?",
+      "passed": true,
+      "quota_error": false,
+      "failures": [],
+      "tools_called": [
+        "get_incident"
+      ],
+      "model_turns": 2,
+      "seconds": 76.2,
+      "answer": "INC0010003 is currently in New state with priority 3 (degraded service). Configuration item: db-prod-01."
+    }
+  ]
+}
