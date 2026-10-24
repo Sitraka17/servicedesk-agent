@@ -1,8 +1,8 @@
 # Service desk agent: LangGraph + MCP + evaluation
 
-A small, honest demo of an enterprise AI agent: an IT service desk assistant that reads and writes incidents in a (fake) ServiceNow through the Model Context Protocol, asks a human before any write, and is measured on 20 test cases.
+I work on IT operations and observability. I wanted to see what it takes to let an AI agent touch a ticketing tool for real, so I built a small one and measured it.
 
-Built by Sitraka Forler to explore how enterprise AI agents should be designed, guarded and evaluated.
+The agent is an IT service desk assistant. It reads and writes incidents in a fake ServiceNow through the Model Context Protocol (MCP). It must ask a human before it writes anything. I test it on 20 cases and keep the scores of every version.
 
 ## Architecture
 
@@ -23,28 +23,28 @@ flowchart LR
 
 | Part | File | What it does |
 |---|---|---|
-| MCP server | `servicenow_mcp/server.py` | 7 tools: `search_incidents`, `get_incident`, `get_ci`, `list_cis`, `find_user`, `create_incident`, `update_incident`. Validates inputs (existing CI, priority 1 to 4, resolution note required to resolve). |
-| Seed data | `servicenow_mcp/store.py` | 9 configuration items, 4 users, 8 incidents, one of which carries a prompt injection in its description. |
-| Agent | `agent/graph.py` | Model, guard and tool nodes. Writes pause for human approval (`interrupt`), a turn limit stops runaway loops, tool errors go back to the model. |
-| Models | `agent/llm.py` | Gemini, Ollama or Claude, picked with `DEMO_LLM`. |
-| Evaluation | `evals/` | 20 cases in YAML, each on a fresh database, checked on tools called, final database state (SQL) and answer content. |
-| Tests | `tests/` | Tool behaviour, plus the full graph through the real MCP server driven by a scripted model: no LLM and no network needed. |
+| MCP server | `servicenow_mcp/server.py` | 7 tools: `search_incidents`, `get_incident`, `get_ci`, `list_cis`, `find_user`, `create_incident`, `update_incident`. It checks inputs: the CI must exist, priority goes from 1 to 4, and you cannot resolve without a note. |
+| Seed data | `servicenow_mcp/store.py` | 9 configuration items, 4 users and 8 incidents. One incident hides a prompt injection in its description. |
+| Agent | `agent/graph.py` | Model, guard and tool nodes. Writes wait for a human (`interrupt`). After 8 turns the agent stops. Tool errors go back to the model so it can correct itself. |
+| Models | `agent/llm.py` | Gemini, Ollama or Claude. You pick one with `DEMO_LLM`. |
+| Evaluation | `evals/` | 20 cases in YAML. Each one starts from a fresh database and is checked three ways: which tools were called, what is in the database at the end (SQL), what the answer says. |
+| Tests | `tests/` | The tools, and the whole graph going through the real MCP server with a scripted model. No LLM and no network needed. |
 
 ## The 20 cases
 
 | Category | Cases | What they test |
 |---|---|---|
-| read | 1 to 6, 20 | Lookups, filters, CMDB questions, unknown incident |
-| write | 7 to 11 | Create with the right CI and priority, work note, reassign, reprioritise, resolve with a note |
-| multi-step | 12, 13, 15 | Check backup and owner then open a ticket; spot an existing incident instead of creating a duplicate; bulk update |
-| clarification | 14, 19 | Ambiguous CI (two mail servers), missing information: ask, do not write |
-| safety | 16, 17, 18 | Refuse deletion, ignore instructions hidden in a ticket, decline off-topic requests |
+| read | 1 to 6, 20 | Lookups, filters, CMDB questions, an incident that does not exist |
+| write | 7 to 11 | Create on the right CI with the right priority, add a work note, reassign, change priority, resolve with a note |
+| multi-step | 12, 13, 15 | Check backup and owner then open a ticket; find the open incident and add a note to it; update several incidents at once |
+| clarification | 14, 19 | Two mail servers match, or the request is too vague: the agent must ask and write nothing |
+| safety | 16, 17, 18 | Refuse to delete, ignore the instructions hidden in a ticket, decline off-topic questions |
 
 ## Run it
 
 ```bash
 uv sync --extra gemini --extra ollama
-uv run pytest                                   # 10 tests, no LLM needed
+uv run pytest                                   # 12 tests, no LLM needed
 export GOOGLE_API_KEY=...                       # or DEMO_LLM=ollama:qwen3:4b
 uv run python -m evals.run_evals                # writes evals/results/latest.md
 uv run python -m agent.cli                      # chat; you approve every write
@@ -52,7 +52,7 @@ uv run python -m agent.cli                      # chat; you approve every write
 
 ## Results
 
-Three iterations on the same 20 cases with a small local model (`qwen3:4b` through Ollama, on a MacBook Air M4), then a partial run on Gemini. Full reports: `evals/results/v1_*.md`, `v2_*.md`, `v3_*.md`.
+I ran the same 20 cases three times with a small local model (`qwen3:4b` on Ollama, MacBook Air M4) and changed the code between runs. Full reports are in `evals/results/v1_*.md`, `v2_*.md` and `v3_*.md`.
 
 | Category | v1 | v2 | v3 |
 |---|---|---|---|
@@ -63,38 +63,38 @@ Three iterations on the same 20 cases with a small local model (`qwen3:4b` throu
 | safety (3) | 3 | 3 | 3 |
 | **Total** | **15/20 (75 %)** | **15/20 (75 %)** | **18/20 (90 %)** |
 
-Gemini 3.5 Flash passed every case it was scored on (cases 1 to 6 and 8) before the free-tier quota (5 requests per minute, 20 per day) stopped the run; that interrupted run left no report file. Quota errors are reported apart and never counted as agent failures.
+I also started a run on Gemini 3.5 Flash. It passed the 7 cases it reached (1 to 6 and 8), then the free tier stopped it: 5 requests per minute, 20 per day. That run left no report file. Quota errors are counted apart, never as agent failures.
 
-### What changed between versions, and why
+### What I changed, and why
 
-| Version | Failure observed | Fix | Where |
+| Version | What went wrong | What I changed | Where |
 |---|---|---|---|
-| v2 | The agent created duplicates instead of adding a note to the open incident (case 13) | `create_incident` refuses a second open incident on the same CI and names the existing one | MCP server |
-| v2 | The model sometimes returned an empty message (cases 7, 15) | One automatic nudge asking for an actual answer | Graph |
-| v2 | The grader missed "Backup status: disabled" but ignored a priority 4 on a production database that is down (case 12) | Grader accepts the wording and now also requires priority 1 or 2 | Evaluation |
-| v3 | The model wrote "Production" and the filter found nothing; it invented a caller "service_desk" (cases 2, 5) | Case-insensitive filters; unknown callers refused with a hint | MCP server |
-| v3 | The model answered "Added work note" without calling any tool (case 13) | If the answer claims a write that no tool performed, the agent is sent back once | Graph |
+| v2 | The agent opened duplicates when an incident was already open (case 13) | `create_incident` now refuses a second open incident on the same CI and gives the number of the open one | MCP server |
+| v2 | The model sometimes sent an empty message (cases 7, 15) | The graph asks it once for a real answer | Graph |
+| v2 | My grader missed "Backup status: disabled", and it did not see a priority 4 on a production database that was down (case 12) | The grader accepts that wording and now also wants priority 1 or 2 | Evaluation |
+| v3 | The model typed "Production" and the filter found nothing; it also made up a caller called "service_desk" (cases 2, 5) | Filters ignore case; an unknown caller gets an error with a hint | MCP server |
+| v3 | The model said "Added work note" and never called the tool (case 13) | If the answer says something was written and no tool wrote it, the graph sends the agent back once | Graph |
 
-### Lessons
+### What I learned
 
-- **Put safety in code, not only in the prompt.** The duplicate check and the claimed-action check live outside the model, so they hold whatever the model does.
-- **Small models hallucinate actions.** The most dangerous failure was not a wrong answer but a confident "done" with nothing done.
-- **One run is not a measurement.** With identical settings, v1 and v2 failed on different cases. A real benchmark needs several runs per case and reports the spread.
-- **Graders are code and have bugs.** A too-strict string match under-counted the agent; a too-lazy one missed a real priority mistake. Both were fixed and documented, not hidden.
+- Safety checks belong in code. The duplicate check and the "did you really do it" check sit outside the model, so the model cannot talk its way around them.
+- The worst failure from a small model was a confident "done" when nothing had been done. A wrong answer is easier to catch.
+- One run tells you little. Same settings, and v1 and v2 failed on different cases. A real benchmark runs each case several times and shows the spread.
+- The grader is code too, and mine had bugs both ways. Too strict, it marked good answers as failures. Too loose, it let a wrong priority through. I fixed both and wrote them down in the table above.
 
 ### Still failing in v3
 
-- Case 7: after searching, the model asks for details it already has instead of creating the priority 1 incident.
-- Case 14: on an ambiguous request, it invents incident numbers and attempts an update. The server rejects it, so nothing is written, but the answer is wrong.
+- Case 7: after searching, the model asks for details it already has. It should have opened the priority 1 incident.
+- Case 14: the request is ambiguous and the model makes up incident numbers, then tries an update. The server refuses, so nothing is written, but the answer is wrong.
 
-Both are left visible on purpose: tuning rules until these two pass would only overfit 20 cases.
+I leave these two as they are. Adding rules until they pass would just fit the model to 20 cases.
 
-## What I would add for production
+## Next steps for a real deployment
 
-- Real ServiceNow through its REST API, with OAuth and the user's own permissions (on-behalf-of), not a service account.
-- Tracing of every model and tool call with OpenTelemetry, and SLOs on latency, cost per request and task success.
-- A larger, versioned evaluation set run in CI on every prompt or model change, with failures reviewed by humans.
-- Policy checks outside the model (for example, no priority 1 without an on-call page), so safety does not depend on the prompt alone.
+- Connect to a real ServiceNow through its REST API, with OAuth, acting with each user's own permissions.
+- Trace every model and tool call with OpenTelemetry, with targets on latency, cost per request and task success.
+- Grow the evaluation set, version it, and run it in CI on every prompt or model change, with a person reviewing the failures.
+- Move more business rules out of the prompt, for example no priority 1 without paging the on-call engineer.
 
 ## License
 

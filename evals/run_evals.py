@@ -67,7 +67,7 @@ async def run_case(case: dict, llm, workdir: str) -> dict:
     tools_called = [c["name"] for m in messages if isinstance(m, AIMessage) for c in m.tool_calls]
     answer = text_of(messages[-1]) if messages else ""
     failures = [error] if error else check(case, tools_called, answer, db)
-    # A quota error says nothing about the agent: report it apart instead of as a failure.
+    # Quota errors come from the API, not from the agent, so they are counted apart.
     quota = bool(error) and ("RESOURCE_EXHAUSTED" in error or "429" in error)
     return {
         "id": case["id"], "category": case["category"], "prompt": case["prompt"],
