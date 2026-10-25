@@ -1,0 +1,23 @@
+{
+  "version": "4",
+  "status": "resolved",
+  "receiver": "servicedesk",
+  "alerts": [
+    {
+      "status": "resolved",
+      "labels": {"alertname": "PostgresDown", "instance": "db-prod-03:9187", "severity": "critical"},
+      "annotations": {"summary": "PostgreSQL on db-prod-03 is not answering"},
+      "startsAt": "2026-10-25T06:42:10Z",
+      "endsAt": "2026-10-25T07:05:00Z",
+      "fingerprint": "a1f3c9e2b7d40001"
+    },
+    {
+      "status": "resolved",
+      "labels": {"alertname": "NodeDiskAlmostFull", "instance": "db-prod-03:9100", "severity": "warning"},
+      "annotations": {"summary": "Disk /var/lib/postgresql above 92 %"},
+      "startsAt": "2026-10-25T06:40:55Z",
+      "endsAt": "2026-10-25T07:06:00Z",
+      "fingerprint": "a1f3c9e2b7d40002"
+    }
+  ]
+}

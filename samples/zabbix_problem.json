@@ -1,0 +1,20 @@
+[
+  {
+    "event_id": "884213",
+    "trigger_id": "23661",
+    "event_value": "1",
+    "host": "web-portal-01",
+    "trigger": "Nginx: 5xx error rate above 20 % for 5 minutes",
+    "severity": "High",
+    "time": "2026.10.25 06:51:12"
+  },
+  {
+    "event_id": "884220",
+    "trigger_id": "23702",
+    "event_value": "1",
+    "host": "mail-relay-02",
+    "trigger": "Postfix: mail queue above 5000 messages",
+    "severity": "Average",
+    "time": "2026.10.25 06:55:40"
+  }
+]

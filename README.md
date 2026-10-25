@@ -23,11 +23,12 @@ flowchart LR
 
 | Part | File | What it does |
 |---|---|---|
-| MCP server | `servicenow_mcp/server.py` | 8 tools: `search_incidents`, `get_incident`, `get_ci`, `list_cis`, `find_user`, `morning_briefing`, `create_incident`, `update_incident`. It checks inputs: the CI must exist, priority goes from 1 to 4, and you cannot resolve without a note. |
+| MCP server | `servicenow_mcp/server.py` | 9 tools: `search_incidents`, `get_incident`, `get_ci`, `list_cis`, `find_user`, `list_alerts`, `morning_briefing`, `create_incident`, `update_incident`. It checks inputs: the CI must exist, priority goes from 1 to 4, and you cannot resolve without a note. |
 | Seed data | `servicenow_mcp/store.py` | 9 configuration items, 4 users and 8 incidents. One incident hides a prompt injection in its description. |
 | Agent | `agent/graph.py` | Model, guard and tool nodes. Writes wait for a human (`interrupt`). After 8 turns the agent stops. Tool errors go back to the model so it can correct itself. |
 | Models | `agent/llm.py` | Gemini, Ollama or Claude. You pick one with `DEMO_LLM`. |
 | Evaluation | `evals/` | 20 cases in YAML. Each one starts from a fresh database and is checked three ways: which tools were called, what is in the database at the end (SQL), what the answer says. |
+| Alerts to incidents | `servicenow_mcp/alerts.py` | Takes Prometheus Alertmanager and Zabbix alerts, groups them by server and opens or updates incidents. No LLM. See below. |
 | Morning briefing | `servicenow_mcp/briefing.py` | Daily health check of the queue, plain SQL, no LLM. See below. |
 | Tests | `tests/` | The tools, and the whole graph going through the real MCP server with a scripted model. No LLM and no network needed. |
 
@@ -45,7 +46,7 @@ flowchart LR
 
 ```bash
 uv sync --extra gemini --extra ollama
-uv run pytest                                   # 16 tests, no LLM needed
+uv run pytest                                   # 23 tests, no LLM needed
 export GOOGLE_API_KEY=...                       # or DEMO_LLM=ollama:qwen3:4b
 uv run python -m evals.run_evals                # writes evals/results/latest.md
 uv run python -m agent.cli                      # chat; you approve every write
@@ -86,9 +87,33 @@ To get it in a team channel at 8:00 on weekdays, set `BRIEFING_WEBHOOK_URL` (any
 0 8 * * 1-5  cd /path/to/servicedesk-agent && uv run python -m servicenow_mcp.briefing --send
 ```
 
+## Alerts to incidents
+
+The other thing I would want at work. Monitoring fires a lot, and nobody wants ten tickets for one dead database. `alerts.py` takes alerts from Prometheus Alertmanager or Zabbix and applies a few fixed rules, server by server:
+
+1. The host is not in the CMDB: no ticket, the alert comes back as `unmatched`. That is a CMDB gap to fix.
+2. The server already has an open incident: the new alerts go in as a work note on it.
+3. Otherwise one incident is opened for all the new alerts of that server. Its priority comes from the worst alert, and a non-production server never goes above priority 3.
+4. An alert that keeps firing only bumps a counter.
+5. A cleared alert adds a note. When nothing fires anymore, the note says the incident can probably be resolved. A person closes it, not the script.
+
+Host names are cleaned first, so `db-prod-03:9100` and `DB-PROD-03.example.lu` both land on `db-prod-03`.
+
+```bash
+uv run python -m servicenow_mcp.alerts samples/alertmanager_firing.json
+uv run python -m servicenow_mcp.alerts samples/zabbix_problem.json --source zabbix
+uv run python -m servicenow_mcp.alerts --serve 8085     # webhook: POST /alertmanager or /zabbix
+```
+
+With the sample batch (5 alerts on 4 hosts), you get one P1 for `db-prod-03` titled "PostgreSQL on db-prod-03 is not answering (+1 other alert)", notes on the incidents already open for `vpn-gw-02` and `test-srv-07`, and `ghost-srv-99` reported as unknown.
+
+For Alertmanager, point a webhook receiver at `http://<host>:8085/alertmanager`. For Zabbix, create a webhook media type that posts JSON with `trigger_id` `{TRIGGER.ID}`, `host` `{HOST.HOST}`, `trigger` `{EVENT.NAME}`, `severity` `{EVENT.SEVERITY}`, `event_value` `{EVENT.VALUE}` and `time` `{EVENT.DATE} {EVENT.TIME}`.
+
+One limit I know about: grouping is by server only. In the sample, a CPU alert on `test-srv-07` lands on the open printer ticket of that server. The note makes it visible and a person can split it, but a smarter correlation (by service, by time window) would be the next step.
+
 ## Results
 
-These scores were measured before I added the morning briefing. I ran the same 20 cases three times with a small local model (`qwen3:4b` on Ollama, MacBook Air M4) and changed the code between runs. Full reports are in `evals/results/v1_*.md`, `v2_*.md` and `v3_*.md`.
+These scores were measured before I added the morning briefing and the alerts. I ran the same 20 cases three times with a small local model (`qwen3:4b` on Ollama, MacBook Air M4) and changed the code between runs. Full reports are in `evals/results/v1_*.md`, `v2_*.md` and `v3_*.md`.
 
 | Category | v1 | v2 | v3 |
 |---|---|---|---|

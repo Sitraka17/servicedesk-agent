@@ -1,0 +1,44 @@
+{
+  "version": "4",
+  "groupKey": "{}:{alertname=~\".*\"}",
+  "status": "firing",
+  "receiver": "servicedesk",
+  "externalURL": "http://alertmanager.example.lu:9093",
+  "alerts": [
+    {
+      "status": "firing",
+      "labels": {"alertname": "PostgresDown", "instance": "db-prod-03:9187", "severity": "critical", "job": "postgres"},
+      "annotations": {"summary": "PostgreSQL on db-prod-03 is not answering"},
+      "startsAt": "2026-10-25T06:42:10Z",
+      "fingerprint": "a1f3c9e2b7d40001"
+    },
+    {
+      "status": "firing",
+      "labels": {"alertname": "NodeDiskAlmostFull", "instance": "db-prod-03:9100", "severity": "warning", "job": "node"},
+      "annotations": {"summary": "Disk /var/lib/postgresql above 92 %"},
+      "startsAt": "2026-10-25T06:40:55Z",
+      "fingerprint": "a1f3c9e2b7d40002"
+    },
+    {
+      "status": "firing",
+      "labels": {"alertname": "TunnelFlapping", "instance": "vpn-gw-02.example.lu", "severity": "high"},
+      "annotations": {"summary": "IPsec tunnel to Bank X went down 6 times in 10 minutes"},
+      "startsAt": "2026-10-25T06:30:00Z",
+      "fingerprint": "a1f3c9e2b7d40003"
+    },
+    {
+      "status": "firing",
+      "labels": {"alertname": "HighCPU", "instance": "test-srv-07:9100", "severity": "critical"},
+      "annotations": {"summary": "CPU above 95 % for 15 minutes"},
+      "startsAt": "2026-10-25T06:20:00Z",
+      "fingerprint": "a1f3c9e2b7d40004"
+    },
+    {
+      "status": "firing",
+      "labels": {"alertname": "NodeDown", "instance": "ghost-srv-99:9100", "severity": "critical"},
+      "annotations": {"summary": "Target is down"},
+      "startsAt": "2026-10-25T06:10:00Z",
+      "fingerprint": "a1f3c9e2b7d40005"
+    }
+  ]
+}

@@ -116,6 +116,20 @@ def find_user(name: str) -> list[dict]:
 
 
 @mcp.tool()
+def list_alerts(ci: str = "", firing_only: bool = True) -> list[dict]:
+    """Monitoring alerts (Prometheus, Zabbix) received so far, with the incident each one is attached to."""
+    sql = "SELECT source, ci, name, severity, status, incident, first_seen, last_seen, occurrences FROM alerts WHERE 1=1"
+    args: list = []
+    if ci:
+        sql += " AND LOWER(ci) = LOWER(?)"
+        args.append(ci)
+    if firing_only:
+        sql += " AND status = 'firing'"
+    with store.connect() as conn:
+        return [dict(r) for r in conn.execute(sql + " ORDER BY severity, last_seen DESC", args)]
+
+
+@mcp.tool()
 def morning_briefing(as_of: str = "", stale_days: int = 3) -> dict:
     """Health of the incident queue: open P1/P2, incidents with no update for stale_days,
     open incidents on production servers without backup, servers with several open incidents,

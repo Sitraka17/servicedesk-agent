@@ -20,6 +20,10 @@ CREATE TABLE incidents (
     ci TEXT, priority INTEGER, state TEXT, assigned_group TEXT,
     caller TEXT, opened_at TEXT, updated_at TEXT, work_notes TEXT DEFAULT '', resolution_note TEXT DEFAULT ''
 );
+CREATE TABLE alerts (
+    alert_key TEXT PRIMARY KEY, source TEXT, host TEXT, ci TEXT, name TEXT, severity INTEGER,
+    status TEXT, incident TEXT, first_seen TEXT, last_seen TEXT, occurrences INTEGER DEFAULT 1
+);
 """
 
 CIS = [
