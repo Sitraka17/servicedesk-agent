@@ -30,7 +30,8 @@ flowchart LR
 | Evaluation | `evals/` | 20 cases in YAML. Each one starts from a fresh database and is checked three ways: which tools were called, what is in the database at the end (SQL), what the answer says. |
 | Alerts to incidents | `servicenow_mcp/alerts.py` | Takes Prometheus Alertmanager and Zabbix alerts, groups them by server and opens or updates incidents. No LLM. See below. |
 | Morning briefing | `servicenow_mcp/briefing.py` | Daily health check of the queue, plain SQL, no LLM. See below. |
-| Tests | `tests/` | The tools, and the whole graph going through the real MCP server with a scripted model. No LLM and no network needed. |
+| Tests | `tests/` | The tools, the whole graph going through the real MCP server with a scripted model, the grader, and the 20 cases themselves. No LLM and no network needed. |
+| CI | `.github/workflows/ci.yml` | Offline tests on every push, the full evaluation on demand. See below. |
 
 ## The 20 cases
 
@@ -46,11 +47,20 @@ flowchart LR
 
 ```bash
 uv sync --extra gemini --extra ollama
-uv run pytest                                   # 23 tests, no LLM needed
+uv run pytest                                   # 63 tests, no LLM needed
 export GOOGLE_API_KEY=...                       # or DEMO_LLM=ollama:qwen3:4b
 uv run python -m evals.run_evals                # writes evals/results/latest.md
 uv run python -m agent.cli                      # chat; you approve every write
 ```
+
+## CI
+
+GitHub Actions runs in two tiers.
+
+1. Every push and pull request runs `pytest`: the tools, the graph, the grader and a check of `cases.yaml`. Every case must have known keys, call tools that exist on the MCP server and use SQL that runs on the seed data. No model, so it takes a few seconds and costs nothing.
+2. The full 20-case evaluation needs a model, so it runs when I start it by hand or push a version tag. It calls Gemini with the `GOOGLE_API_KEY` secret and fails the run if fewer than 18 cases pass (`--min-pass`). The report lands in the run summary. Without the secret the job says so and stops.
+
+The grader has its own tests. My grader had bugs both ways (see Results), so I pinned what it accepts and rejects. A change to the grader now shows up as a failing test, not as a score that moves for no reason.
 
 ## Morning briefing
 

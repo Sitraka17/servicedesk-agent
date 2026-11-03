@@ -2,6 +2,7 @@
 
   python -m evals.run_evals                 # all cases, model from DEMO_LLM
   python -m evals.run_evals --only 7 13     # selected cases
+  python -m evals.run_evals --min-pass 18   # exit code 1 below 18 passes (used as a CI gate)
 """
 
 import argparse
@@ -9,6 +10,7 @@ import asyncio
 import json
 import os
 import sqlite3
+import sys
 import tempfile
 import time
 from collections import defaultdict
@@ -114,6 +116,7 @@ def write_report(results: list[dict], spec: str) -> str:
 async def main():
     parser = argparse.ArgumentParser()
     parser.add_argument("--only", type=int, nargs="*")
+    parser.add_argument("--min-pass", type=int, help="exit with code 1 if fewer cases pass")
     args = parser.parse_args()
     with open(os.path.join(HERE, "cases.yaml")) as f:
         cases = yaml.safe_load(f)
@@ -138,6 +141,11 @@ async def main():
     with open(os.path.join(out, "latest.md"), "w") as f:
         f.write(report)
     print("\n" + report.split("\n")[2])
+    passed = sum(r["passed"] for r in results)
+    if args.min_pass is not None and passed < args.min_pass:
+        # Quota errors count as failures here: a gate that skips cases is not a gate.
+        print(f"Gate failed: {passed} passed, {args.min_pass} required.")
+        sys.exit(1)
 
 
 if __name__ == "__main__":
